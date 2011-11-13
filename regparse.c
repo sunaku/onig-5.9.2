@@ -4639,7 +4639,7 @@ parse_enclose(Node** np, OnigToken* tok, int term, UChar** src, UChar* end,
 #ifdef USE_POSIXLINE_OPTION
     case 'p':
 #endif
-    case '-': case 'i': case 'm': case 's': case 'x':
+    case '-': case 'i': case 'm': case 's': case 'x': case 'v':
       {
 	int neg = 0;
 
@@ -4651,6 +4651,7 @@ parse_enclose(Node** np, OnigToken* tok, int term, UChar** src, UChar* end,
 
 	  case '-':  neg = 1; break;
 	  case 'x':  ONOFF(option, ONIG_OPTION_EXTEND,     neg); break;
+	  case 'v':  ONOFF(option, ONIG_OPTION_NEGATE,     neg); break;
 	  case 'i':  ONOFF(option, ONIG_OPTION_IGNORECASE, neg); break;
 	  case 's':
 	    if (IS_SYNTAX_OP2(env->syntax, ONIG_SYN_OP2_OPTION_PERL)) {
@@ -4696,6 +4697,38 @@ parse_enclose(Node** np, OnigToken* tok, int term, UChar** src, UChar* end,
 	    if (r < 0) return r;
 	    *np = node_new_option(option);
 	    CHECK_NULL_RETURN_MEMERR(*np);
+            /* expand "(?v:r)" into "(?:(?!r).)" */
+            if (IS_NEGATE(option)) {
+              Node *seq, *nla, *any;
+
+              /* build "(?!r)" */
+              nla = onig_node_new_anchor(ANCHOR_PREC_READ_NOT);
+              CHECK_NULL_RETURN_MEMERR(nla);
+              NANCHOR(nla)->target = target;
+
+              /* build "." */
+              any = node_new_anychar();
+              if (IS_NULL(any)) {
+                onig_node_free(nla);
+                return ONIGERR_MEMORY;
+              }
+
+              /* put "(?!r)" and "." in sequence */
+              seq = node_new_list(nla, NULL);
+              if (IS_NULL(seq)) {
+                onig_node_free(nla);
+                onig_node_free(any);
+                return ONIGERR_MEMORY;
+              }
+              NCDR(seq) = node_new_list(any, NULL);
+              if (IS_NULL(NCDR(seq))) {
+                onig_node_free(nla);
+                onig_node_free(any);
+                onig_node_free(seq);
+                return ONIGERR_MEMORY;
+              }
+              target = seq;
+            }
 	    NENCLOSE(*np)->target = target;
 	    *src = p;
 	    return 0;

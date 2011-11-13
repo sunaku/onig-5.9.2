@@ -3730,7 +3730,7 @@ onig_search(regex_t* reg, const UChar* str, const UChar* end,
   if (r != ONIG_MISMATCH)
     fprintf(stderr, "onig_search: error %d\n", r);
 #endif
-  return r;
+  goto negate;
 
  mismatch_no_msa:
   r = ONIG_MISMATCH;
@@ -3740,12 +3740,17 @@ onig_search(regex_t* reg, const UChar* str, const UChar* end,
   if (r != ONIG_MISMATCH)
     fprintf(stderr, "onig_search: error %d\n", r);
 #endif
-  return r;
+  goto negate;
 
  match:
   ONIG_STATE_DEC_THREAD(reg);
   MATCH_ARG_FREE(msa);
-  return s - str;
+  r = s - str;
+  /* fall */
+ negate:
+  if (r >= ONIG_MISMATCH && IS_NEGATE(reg->options))
+    return r == ONIG_MISMATCH ? ONIG_NORMAL : ONIG_MISMATCH;
+  return r;
 }
 
 extern OnigEncoding
